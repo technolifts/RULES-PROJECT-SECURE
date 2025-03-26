@@ -1,10 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import DocumentUpload from '@/components/DocumentUpload';
+import DocumentList from '@/components/DocumentList';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
+  const [showUploadForm, setShowUploadForm] = useState(false);
+
+  const handleUploadSuccess = () => {
+    setShowUploadForm(false);
+  };
 
   return (
     <ProtectedRoute>
@@ -26,11 +34,23 @@ export default function Dashboard() {
         <main>
           <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
             <div className="px-4 py-6 sm:px-0">
-              <div className="border-4 border-dashed border-gray-200 rounded-lg h-96 p-4 flex flex-col justify-center items-center">
-                <h2 className="text-2xl font-semibold mb-4">Your Documents</h2>
-                <p className="text-gray-500">You don't have any documents yet.</p>
-                <button className="btn-primary mt-4">Upload Document</button>
+              <div className="mb-6 flex justify-between items-center">
+                <h2 className="text-2xl font-semibold">Your Documents</h2>
+                <button 
+                  onClick={() => setShowUploadForm(!showUploadForm)}
+                  className="btn-primary"
+                >
+                  {showUploadForm ? 'Cancel Upload' : 'Upload Document'}
+                </button>
               </div>
+              
+              {showUploadForm && (
+                <div className="mb-6">
+                  <DocumentUpload onSuccess={handleUploadSuccess} />
+                </div>
+              )}
+              
+              <DocumentList />
             </div>
           </div>
         </main>

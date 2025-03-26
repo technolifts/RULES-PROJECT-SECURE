@@ -140,3 +140,166 @@ def delete_document(
     db.commit()
     
     return None
+
+@router.get("/{document_id}/download")
+def download_document(
+    *,
+    db: Session = Depends(get_db),
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Download a document."""
+    from fastapi.responses import FileResponse
+    
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+    
+    # Check if user is the owner
+    if document.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+    
+    # Check if file exists
+    if not os.path.exists(document.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on server",
+        )
+    
+    # Create audit log for download
+    create_audit_log(
+        db=db,
+        user_id=current_user.id,
+        action="download",
+        resource_type="document",
+        resource_id=str(document.id),
+    )
+    
+    return FileResponse(
+        path=document.file_path,
+        filename=document.original_filename,
+        media_type=document.mime_type,
+    )
+
+@router.get("/{document_id}/shared/{token}")
+def get_shared_document(
+    *,
+    db: Session = Depends(get_db),
+    document_id: uuid.UUID,
+    token: str,
+) -> Any:
+    """Get document via share link."""
+    # Validate share link
+    share_link = db.query(ShareLink).filter(ShareLink.token == token).first()
+    if not share_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Share link not found",
+        )
+    
+    # Check if share link is for this document
+    if share_link.document_id != document_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid share link for this document",
+        )
+    
+    # Check if share link is active
+    if not share_link.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Share link is inactive",
+        )
+    
+    # Check if share link is expired
+    if share_link.expires_at and share_link.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Share link has expired",
+        )
+    
+    # Get document
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+    
+    # Create audit log for access via share link
+    create_audit_log(
+        db=db,
+        action="access_via_share",
+        resource_type="document",
+        resource_id=str(document.id),
+        details={"share_link_id": str(share_link.id)},
+    )
+    
+    return document
+
+@router.get("/shared/{token}/download")
+def download_shared_document(
+    *,
+    db: Session = Depends(get_db),
+    token: str,
+) -> Any:
+    """Download document via share link."""
+    from fastapi.responses import FileResponse
+    
+    # Validate share link
+    share_link = db.query(ShareLink).filter(ShareLink.token == token).first()
+    if not share_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Share link not found",
+        )
+    
+    # Check if share link is active
+    if not share_link.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Share link is inactive",
+        )
+    
+    # Check if share link is expired
+    if share_link.expires_at and share_link.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Share link has expired",
+        )
+    
+    # Get document
+    document = db.query(Document).filter(Document.id == share_link.document_id).first()
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+    
+    # Check if file exists
+    if not os.path.exists(document.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on server",
+        )
+    
+    # Create audit log for download via share link
+    create_audit_log(
+        db=db,
+        action="download_via_share",
+        resource_type="document",
+        resource_id=str(document.id),
+        details={"share_link_id": str(share_link.id)},
+    )
+    
+    return FileResponse(
+        path=document.file_path,
+        filename=document.original_filename,
+        media_type=document.mime_type,
+    )

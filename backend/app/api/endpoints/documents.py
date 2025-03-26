@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime
 from typing import Any, List
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -9,6 +10,7 @@ from app.core.config import settings
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.document import Document
+from app.models.share_link import ShareLink
 from app.models.user import User
 from app.schemas.document import Document as DocumentSchema, DocumentCreate
 from app.utils.audit import create_audit_log

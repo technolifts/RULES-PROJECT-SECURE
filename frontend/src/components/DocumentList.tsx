@@ -129,6 +129,12 @@ export default function DocumentList() {
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <button 
+                  onClick={() => window.location.href = `/documents/${doc.id}`}
+                  className="text-blue-600 hover:text-blue-900 mr-3"
+                >
+                  View
+                </button>
+                <button 
                   onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
                   className="text-blue-600 hover:text-blue-900 mr-3"
                 >

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
+import DocumentPreview from '@/components/DocumentPreview';
 
 interface ShareLink {
   id: string;
@@ -132,6 +133,16 @@ export default function SharedDocumentPage() {
               <p className="text-gray-700 mt-2">{document.description}</p>
             )}
           </div>
+        </div>
+        
+        {/* Document Preview */}
+        <div className="my-6">
+          <DocumentPreview 
+            documentId={document.id} 
+            mimeType={document.mime_type} 
+            filename={document.original_filename}
+            shareToken={token}
+          />
         </div>
         
         <div className="border-t pt-6">

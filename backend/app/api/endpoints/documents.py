@@ -305,3 +305,108 @@ def download_shared_document(
         filename=document.original_filename,
         media_type=document.mime_type,
     )
+
+@router.get("/{document_id}/preview")
+async def preview_document(
+    *,
+    db: Session = Depends(get_db),
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Generate a preview for a document."""
+    from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+    from app.utils.preview import generate_preview
+    
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+    
+    # Check if user is the owner
+    if document.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+    
+    # Check if file exists
+    if not os.path.exists(document.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on server",
+        )
+    
+    # Create audit log for preview
+    create_audit_log(
+        db=db,
+        user_id=current_user.id,
+        action="preview",
+        resource_type="document",
+        resource_id=str(document.id),
+    )
+    
+    # Generate preview based on file type
+    preview_response = await generate_preview(document.file_path, document.mime_type)
+    return preview_response
+
+@router.get("/shared/{token}/preview")
+async def preview_shared_document(
+    *,
+    db: Session = Depends(get_db),
+    token: str,
+) -> Any:
+    """Generate a preview for a shared document."""
+    from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+    from app.utils.preview import generate_preview
+    
+    # Validate share link
+    share_link = db.query(ShareLink).filter(ShareLink.token == token).first()
+    if not share_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Share link not found",
+        )
+    
+    # Check if share link is active
+    if not share_link.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Share link is inactive",
+        )
+    
+    # Check if share link is expired
+    if share_link.expires_at and share_link.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Share link has expired",
+        )
+    
+    # Get document
+    document = db.query(Document).filter(Document.id == share_link.document_id).first()
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+    
+    # Check if file exists
+    if not os.path.exists(document.file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on server",
+        )
+    
+    # Create audit log for preview via share link
+    create_audit_log(
+        db=db,
+        action="preview_via_share",
+        resource_type="document",
+        resource_id=str(document.id),
+        details={"share_link_id": str(share_link.id)},
+    )
+    
+    # Generate preview based on file type
+    preview_response = await generate_preview(document.file_path, document.mime_type)
+    return preview_response

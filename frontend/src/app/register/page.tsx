@@ -43,7 +43,13 @@ export default function Register() {
     try {
       await registerUser(data.username, data.email, data.password);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      if (err.response?.status === 429) {
+        setError('Too many registration attempts. Please try again later.');
+      } else if (err.response?.status === 400) {
+        setError(err.response.data.detail || 'Registration failed. Please try again.');
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }

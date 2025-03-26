@@ -2,10 +2,15 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider, useAuth } from '../AuthContext';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 
 // Mock axios
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+// Mock js-cookie
+jest.mock('js-cookie');
+const mockedCookies = Cookies as jest.Mocked<typeof Cookies>;
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -36,13 +41,15 @@ describe('AuthContext', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     
-    // Mock successful auth check
-    mockedAxios.get.mockResolvedValue({
-      data: {
-        user: null,
-        token: null
+    // Mock cookie get to return null (no token)
+    mockedCookies.get.mockReturnValue(undefined);
+    
+    // Mock axios defaults
+    mockedAxios.defaults = {
+      headers: {
+        common: {}
       }
-    });
+    } as any;
   });
   
   it('provides authentication state and methods', async () => {
@@ -58,10 +65,18 @@ describe('AuthContext', () => {
     // Mock successful login
     mockedAxios.post.mockResolvedValueOnce({
       data: {
-        user: { id: '1', username: 'testuser', email: 'test@example.com' },
-        token: 'fake-token'
+        access_token: 'fake-token',
+        token_type: 'bearer'
       }
     });
+    
+    // Mock successful user fetch
+    mockedAxios.get.mockResolvedValueOnce({
+      data: { id: '1', username: 'testuser', email: 'test@example.com' }
+    });
+    
+    // Mock cookie set
+    mockedCookies.set.mockImplementation(() => {});
     
     // Click login button
     await userEvent.click(screen.getByText('Login'));
@@ -72,8 +87,14 @@ describe('AuthContext', () => {
       expect(screen.getByTestId('username')).toHaveTextContent('testuser');
     });
     
+    // Mock cookie get to return token
+    mockedCookies.get.mockReturnValue('fake-token');
+    
     // Mock successful logout
     mockedAxios.post.mockResolvedValueOnce({});
+    
+    // Mock cookie remove
+    mockedCookies.remove.mockImplementation(() => {});
     
     // Click logout button
     await userEvent.click(screen.getByText('Logout'));

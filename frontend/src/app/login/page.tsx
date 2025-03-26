@@ -34,7 +34,11 @@ export default function Login() {
     try {
       await login(data.email, data.password);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      if (err.response?.status === 429) {
+        setError('Too many login attempts. Please try again later.');
+      } else {
+        setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }

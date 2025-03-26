@@ -1,9 +1,11 @@
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash, verify_password
@@ -13,10 +15,14 @@ from app.schemas.token import Token
 from app.schemas.user import UserCreate, User as UserSchema
 from app.utils.audit import create_audit_log
 
+# Rate limiter to prevent brute force attacks
+limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter()
 
 @router.post("/register", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
-def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
+@limiter.limit("5/minute")
+def register(*, request: Request, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
     """Register a new user."""
     # Check if user with this email already exists
     user = db.query(User).filter(User.email == user_in.email).first()
@@ -56,8 +62,9 @@ def register(*, db: Session = Depends(get_db), user_in: UserCreate) -> Any:
     return db_user
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 def login(
-    db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
+    request: Request, db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ) -> Any:
     """Login and get access token."""
     # Try to find user by email
@@ -97,3 +104,13 @@ def login(
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+def logout(token: str = Depends(oauth2_scheme)) -> Any:
+    """Logout and invalidate token."""
+    from app.core.security import add_token_to_blacklist
+    
+    # Add token to blacklist
+    add_token_to_blacklist(token)
+    
+    return {"message": "Successfully logged out"}

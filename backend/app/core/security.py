@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Any, Optional, Union
+import secrets
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Cookie, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -29,9 +30,28 @@ def create_access_token(subject: Union[str, Any], expires_delta: Optional[timede
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode = {"exp": expire, "sub": str(subject)}
+    # Add jti (JWT ID) claim for token revocation capability
+    jti = secrets.token_hex(16)
+    
+    to_encode = {
+        "exp": expire,
+        "sub": str(subject),
+        "jti": jti,
+        "iat": datetime.utcnow()
+    }
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+# Simple in-memory token blacklist (in production, use Redis or similar)
+token_blacklist = set()
+
+def add_token_to_blacklist(token: str) -> None:
+    """Add a token to the blacklist."""
+    token_blacklist.add(token)
+
+def is_token_blacklisted(token: str) -> bool:
+    """Check if a token is blacklisted."""
+    return token in token_blacklist
 
 async def get_current_user(
     db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
@@ -44,9 +64,18 @@ async def get_current_user(
     )
     
     try:
+        # Check if token is blacklisted
+        if is_token_blacklisted(token):
+            raise credentials_exception
+            
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
+            raise credentials_exception
+            
+        # Check token expiration
+        exp = payload.get("exp")
+        if exp is None or datetime.utcnow() > datetime.fromtimestamp(exp):
             raise credentials_exception
     except JWTError:
         raise credentials_exception

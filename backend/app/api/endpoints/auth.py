@@ -50,13 +50,15 @@ def register(*, request: Request, db: Session = Depends(get_db), user_in: UserCr
     db.commit()
     db.refresh(db_user)
     
-    # Create audit log
+    # Create audit log with request information
     create_audit_log(
         db=db,
         user_id=db_user.id,
         action="register",
         resource_type="user",
         resource_id=str(db_user.id),
+        ip_address=request.client.host,
+        user_agent=request.headers.get("user-agent", ""),
     )
     
     return db_user
@@ -94,13 +96,15 @@ def login(
         subject=str(user.id), expires_delta=access_token_expires
     )
     
-    # Create audit log
+    # Create audit log with request information
     create_audit_log(
         db=db,
         user_id=user.id,
         action="login",
         resource_type="user",
         resource_id=str(user.id),
+        ip_address=request.client.host,
+        user_agent=request.headers.get("user-agent", ""),
     )
     
     return {"access_token": access_token, "token_type": "bearer"}

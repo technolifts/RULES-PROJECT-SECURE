@@ -13,3 +13,4 @@ httpx==0.25.1
 python-dotenv==1.0.0
 slowapi==0.1.8
 pillow==10.1.0
+itsdangerous==2.1.2  # For SessionMiddleware
